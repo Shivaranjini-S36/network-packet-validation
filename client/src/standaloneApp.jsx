@@ -966,53 +966,544 @@ function SampleTestingView({ samples, onRunTest }) {
 // --- DFA Visualization View ---
 function DfaVisualizerView() {
   const [activeNode, setActiveNode] = useState('START');
+  const [filterState, setFilterState] = useState('ALL');
+  const [selectedSample, setSelectedSample] = useState('sample-1');
+  const [simPacket, setSimPacket] = useState({
+    sourceIp: '192.0.2.10',
+    destinationIp: '198.51.100.80',
+    protocol: 'TCP',
+    sourcePort: '49152',
+    destinationPort: '80'
+  });
+  const [simSteps, setSimSteps] = useState([]);
+  const [simIndex, setSimIndex] = useState(0);
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  const nodePositions = {
+    START: {
+      x: 70, y: 160, label: 'START (q0)', color: '#38bdf8', type: 'Initial State (q0)',
+      desc: 'Packet ingest begins. Extracts Source IP field for RFC 791 IPv4 format and [0–255] octet validation.'
+    },
+    SOURCE_VALIDATION: {
+      x: 220, y: 160, label: 'SRC_VAL', color: '#60a5fa', type: 'Validation State',
+      desc: 'Source IP passed lexical validation. Ingests Destination IP for format and octet range verification.'
+    },
+    DESTINATION_VALIDATION: {
+      x: 370, y: 160, label: 'DST_VAL', color: '#818cf8', type: 'Validation State',
+      desc: 'Both IP addresses verified. Automaton inspects Protocol header (TCP, UDP, or ICMP).'
+    },
+    PROTOCOL_VALIDATION: {
+      x: 520, y: 100, label: 'PROTO_VAL', color: '#a78bfa', type: 'Validation State',
+      desc: 'Transport protocol identified (TCP/UDP). Requires verification of 16-bit integer ports [1–65535].'
+    },
+    ICMP_CLASSIFIED: {
+      x: 520, y: 230, label: 'ICMP_CLASS', color: '#fbbf24', type: 'Classification State',
+      desc: 'Network layer ICMP (RFC 792) confirmed. Transport ports are naturally bypassed.'
+    },
+    PORT_VALIDATION: {
+      x: 670, y: 100, label: 'PORT_VAL', color: '#c084fc', type: 'Validation State',
+      desc: 'Source and Destination ports validated within integer range [1–65535]. Ready to dispatch protocol classification.'
+    },
+    TCP_CLASSIFIED: {
+      x: 810, y: 65, label: 'TCP_CLASS', color: '#06b6d4', type: 'Classification State',
+      desc: 'Transmission Control Protocol (RFC 793) confirmed with full connection-oriented header integrity.'
+    },
+    UDP_CLASSIFIED: {
+      x: 810, y: 135, label: 'UDP_CLASS', color: '#3b82f6', type: 'Classification State',
+      desc: 'User Datagram Protocol (RFC 768) confirmed with valid connectionless ports.'
+    },
+    ACCEPTED: {
+      x: 935, y: 160, label: 'ACCEPTED (F)', color: '#34d399', isFinal: true, type: 'Final Accepting State (F)',
+      desc: 'Acceptance state reached. Packet conforms to all networking standards, regex rules, and protocol criteria.'
+    },
+    REJECTED: {
+      x: 520, y: 370, label: 'REJECTED (Trap)', color: '#f87171', isTrap: true, type: 'Trap / Sink State (Non-Accepting)',
+      desc: 'Dead-end trap state entered whenever any field fails lexical regex or semantic constraints. Irrecoverable.'
+    }
+  };
+
+  const TRANSITION_TABLE = [
+    { from: 'START', input: 'VALID_SRC_IP', to: 'SOURCE_VALIDATION', type: 'valid', rule: 'IPv4 format matching regex, octets 0–255' },
+    { from: 'START', input: 'INVALID_SRC_IP', to: 'REJECTED', type: 'invalid', rule: 'Non-IPv4 format or octet > 255' },
+    { from: 'SOURCE_VALIDATION', input: 'VALID_DST_IP', to: 'DESTINATION_VALIDATION', type: 'valid', rule: 'IPv4 format matching regex, octets 0–255' },
+    { from: 'SOURCE_VALIDATION', input: 'INVALID_DST_IP', to: 'REJECTED', type: 'invalid', rule: 'Non-IPv4 format or octet > 255' },
+    { from: 'DESTINATION_VALIDATION', input: 'PROTO_TCP', to: 'PROTOCOL_VALIDATION', type: 'valid', rule: 'Protocol equals TCP; transport ports required' },
+    { from: 'DESTINATION_VALIDATION', input: 'PROTO_UDP', to: 'PROTOCOL_VALIDATION', type: 'valid', rule: 'Protocol equals UDP; transport ports required' },
+    { from: 'DESTINATION_VALIDATION', input: 'PROTO_ICMP', to: 'ICMP_CLASSIFIED', type: 'valid', rule: 'Protocol equals ICMP; port verification bypassed (RFC 792)' },
+    { from: 'DESTINATION_VALIDATION', input: 'INVALID_PROTO', to: 'REJECTED', type: 'invalid', rule: 'Protocol missing or unsupported' },
+    { from: 'PROTOCOL_VALIDATION', input: 'VALID_PORTS', to: 'PORT_VALIDATION', type: 'valid', rule: 'Source & Dest ports in range [1 - 65535]' },
+    { from: 'PROTOCOL_VALIDATION', input: 'INVALID_PORTS', to: 'REJECTED', type: 'invalid', rule: 'Port out of range or non-numeric' },
+    { from: 'PORT_VALIDATION', input: 'DISPATCH_TCP', to: 'TCP_CLASSIFIED', type: 'valid', rule: 'Dispatch to Transmission Control Protocol' },
+    { from: 'PORT_VALIDATION', input: 'DISPATCH_UDP', to: 'UDP_CLASSIFIED', type: 'valid', rule: 'Dispatch to User Datagram Protocol' },
+    { from: 'TCP_CLASSIFIED', input: 'FINALIZE_ACCEPT', to: 'ACCEPTED', type: 'valid', rule: 'All validation criteria met; packet accepted' },
+    { from: 'UDP_CLASSIFIED', input: 'FINALIZE_ACCEPT', to: 'ACCEPTED', type: 'valid', rule: 'All validation criteria met; packet accepted' },
+    { from: 'ICMP_CLASSIFIED', input: 'FINALIZE_ACCEPT', to: 'ACCEPTED', type: 'valid', rule: 'ICMP criteria met; packet accepted' },
+    { from: 'REJECTED', input: 'ANY_INPUT', to: 'REJECTED', type: 'invalid', rule: 'Trap / Sink state self-loop (irrecoverable dead-end)' }
+  ];
+
+  const handleSelectSample = (sampleId) => {
+    setSelectedSample(sampleId);
+    const found = SAMPLE_VECTORS.find(s => s.id === sampleId);
+    if (found) {
+      setSimPacket({
+        sourceIp: found.packet.sourceIp || '',
+        destinationIp: found.packet.destinationIp || '',
+        protocol: found.packet.protocol || 'TCP',
+        sourcePort: found.packet.sourcePort !== null && found.packet.sourcePort !== undefined ? String(found.packet.sourcePort) : '',
+        destinationPort: found.packet.destinationPort !== null && found.packet.destinationPort !== undefined ? String(found.packet.destinationPort) : ''
+      });
+      setIsSimulating(false);
+      setSimSteps([]);
+      setSimIndex(0);
+      setActiveNode('START');
+    }
+  };
+
+  const handleStartSim = () => {
+    const res = executeDFA({
+      sourceIp: simPacket.sourceIp,
+      destinationIp: simPacket.destinationIp,
+      protocol: simPacket.protocol,
+      sourcePort: simPacket.protocol === 'ICMP' ? null : simPacket.sourcePort,
+      destinationPort: simPacket.protocol === 'ICMP' ? null : simPacket.destinationPort
+    });
+    setSimSteps(res.transitions || []);
+    setSimIndex(0);
+    setActiveNode('START');
+    setIsSimulating(true);
+  };
+
+  const handleNextStep = () => {
+    if (simIndex < simSteps.length) {
+      const step = simSteps[simIndex];
+      setActiveNode(step.toState);
+      setSimIndex(prev => prev + 1);
+    }
+  };
+
+  const handleResetSim = () => {
+    setIsSimulating(false);
+    setSimSteps([]);
+    setSimIndex(0);
+    setActiveNode('START');
+  };
+
+  const currentStep = simIndex > 0 ? simSteps[simIndex - 1] : null;
+  const isSimComplete = isSimulating && simIndex >= simSteps.length && simSteps.length > 0;
+  const currentNodeInfo = nodePositions[activeNode] || nodePositions.START;
+
+  const filteredTransitions = TRANSITION_TABLE.filter(t => {
+    if (filterState === 'VALID') return t.type === 'valid';
+    if (filterState === 'INVALID') return t.type === 'invalid';
+    return true;
+  });
 
   return (
     <div>
+      {/* Formal Automaton 5-Tuple Definition */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><span>📐 Formal DFA Definition: M = (Q, Σ, q0, F, δ)</span></div>
-          <span className="badge badge-valid">DETERMINISTIC FINITE AUTOMATON</span>
+          <div className="card-title">
+            <span>📐 Formal Automaton Definition: M = (Q, Σ, q0, F, δ)</span>
+          </div>
+          <span className="badge badge-valid">DETERMINISTIC FINITE AUTOMATON (DFA)</span>
         </div>
-        <div style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>
-          <div><strong>States (Q):</strong> START, SOURCE_VALIDATION, DESTINATION_VALIDATION, PROTOCOL_VALIDATION, PORT_VALIDATION, TCP_CLASSIFIED, UDP_CLASSIFIED, ICMP_CLASSIFIED, ACCEPTED, REJECTED</div>
-          <div><strong>Initial (q0):</strong> START | <strong>Final (F):</strong> &#123; ACCEPTED &#125; | <strong>Trap:</strong> &#123; REJECTED &#125;</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', fontSize: '0.85rem' }}>
+          <div>
+            <div style={{ color: '#94a3b8', fontWeight: 600 }}>Set of States (Q): |Q| = 10</div>
+            <div style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8', fontSize: '0.75rem', marginTop: '0.25rem', wordBreak: 'break-word' }}>
+              &#123; START, SOURCE_VALIDATION, DESTINATION_VALIDATION, PROTOCOL_VALIDATION, PORT_VALIDATION, TCP_CLASSIFIED, UDP_CLASSIFIED, ICMP_CLASSIFIED, ACCEPTED, REJECTED &#125;
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#94a3b8', fontWeight: 600 }}>Initial (q0), Final (F) &amp; Trap States</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+              <span style={{ color: '#60a5fa' }}>q0 = START</span> | <span style={{ color: '#34d399' }}>F = &#123; ACCEPTED &#125;</span> | <span style={{ color: '#f87171' }}>Trap = &#123; REJECTED &#125;</span>
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#94a3b8', fontWeight: 600 }}>Input Alphabet (Σ)</div>
+            <div style={{ fontFamily: 'var(--font-mono)', color: '#c084fc', fontSize: '0.75rem', marginTop: '0.25rem', wordBreak: 'break-word' }}>
+              &#123; VALID_SRC_IP, INVALID_SRC_IP, VALID_DST_IP, INVALID_DST_IP, PROTO_TCP, PROTO_UDP, PROTO_ICMP, INVALID_PROTO, VALID_PORTS, INVALID_PORTS, DISPATCH_TCP, DISPATCH_UDP, FINALIZE_ACCEPT &#125;
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* State Transition Diagram (SVG) */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><span>🗺️ State Transition Diagram</span></div>
-          <span style={{ fontSize: '0.8rem', color: '#38bdf8' }}>Click any node to inspect</span>
+          <div className="card-title">
+            <span>🗺️ DFA State Transition Diagram</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+              Active Node: <strong style={{ color: currentNodeInfo.color }}>{activeNode}</strong>
+            </span>
+          </div>
         </div>
+
         <div className="dfa-diagram-box">
-          <svg width="1050" height="400" viewBox="0 0 1050 400" style={{ background: '#0b1120', borderRadius: '12px' }}>
-            {[
-              { id: 'START', x: 60, y: 150, label: 'START (q0)', color: '#38bdf8' },
-              { id: 'SOURCE_VALIDATION', x: 220, y: 150, label: 'SRC_VAL', color: '#60a5fa' },
-              { id: 'DESTINATION_VALIDATION', x: 380, y: 150, label: 'DST_VAL', color: '#818cf8' },
-              { id: 'PROTOCOL_VALIDATION', x: 540, y: 100, label: 'PROTO_VAL', color: '#a78bfa' },
-              { id: 'ICMP_CLASSIFIED', x: 540, y: 220, label: 'ICMP_CLASS', color: '#fbbf24' },
-              { id: 'PORT_VALIDATION', x: 690, y: 100, label: 'PORT_VAL', color: '#c084fc' },
-              { id: 'TCP_CLASSIFIED', x: 830, y: 70, label: 'TCP_CLASS', color: '#06b6d4' },
-              { id: 'UDP_CLASSIFIED', x: 830, y: 130, label: 'UDP_CLASS', color: '#3b82f6' },
-              { id: 'ACCEPTED', x: 960, y: 150, label: 'ACCEPTED (F)', color: '#34d399', isFinal: true },
-              { id: 'REJECTED', x: 540, y: 340, label: 'REJECTED (Trap)', color: '#f87171' }
-            ].map(node => (
-              <g key={node.id} style={{ cursor: 'pointer' }} onClick={() => setActiveNode(node.id)}>
-                {node.isFinal && <circle cx={node.x} cy={node.y} r="32" fill="none" stroke="#10b981" strokeWidth="2" />}
-                <circle
-                  cx={node.x} cy={node.y} r="26"
-                  fill={activeNode === node.id ? 'rgba(6, 182, 212, 0.4)' : '#1e293b'}
-                  stroke={activeNode === node.id ? '#06b6d4' : node.color}
-                  strokeWidth="2"
-                />
-                <text cx={node.x} cy={node.y} x={node.x} y={node.y + 4} fill="#fff" fontSize="9" fontWeight="700" textAnchor="middle">
-                  {node.label.split(' ')[0]}
-                </text>
-              </g>
-            ))}
+          <svg viewBox="0 0 1000 470" style={{ width: '100%', maxWidth: '1000px', height: 'auto', display: 'block', background: '#0a0f1d', borderRadius: '12px' }}>
+            <defs>
+              <marker id="dfa-arrow" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
+              </marker>
+              <marker id="dfa-arrow-active" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
+              </marker>
+              <marker id="dfa-arrow-reject" viewBox="0 0 10 10" refX="20" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" />
+              </marker>
+              <marker id="dfa-arrow-accept" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+              </marker>
+              <filter id="dfa-glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+
+            {/* Initial State Arrow */}
+            <line x1="15" y1="160" x2="45" y2="160" stroke="#38bdf8" strokeWidth="2.5" markerEnd="url(#dfa-arrow-active)" />
+            <text x="18" y="148" fill="#38bdf8" fontSize="11" fontWeight="700">Start</text>
+
+            {/* START -> SRC_VAL */}
+            <line x1="70" y1="160" x2="220" y2="160" stroke="#64748b" strokeWidth="2" markerEnd="url(#dfa-arrow)" />
+            <rect x="98" y="140" width="94" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="145" y="153" fill="#38bdf8" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">VALID_SRC_IP</text>
+
+            {/* SRC_VAL -> DST_VAL */}
+            <line x1="220" y1="160" x2="370" y2="160" stroke="#64748b" strokeWidth="2" markerEnd="url(#dfa-arrow)" />
+            <rect x="248" y="140" width="94" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="295" y="153" fill="#38bdf8" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">VALID_DST_IP</text>
+
+            {/* DST_VAL -> PROTO_VAL */}
+            <line x1="370" y1="160" x2="520" y2="100" stroke="#64748b" strokeWidth="2" markerEnd="url(#dfa-arrow)" />
+            <rect x="390" y="112" width="105" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="442" y="125" fill="#a78bfa" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">PROTO_TCP / UDP</text>
+
+            {/* DST_VAL -> ICMP_CLASS */}
+            <line x1="370" y1="160" x2="520" y2="230" stroke="#64748b" strokeWidth="2" markerEnd="url(#dfa-arrow)" />
+            <rect x="395" y="198" width="90" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="440" y="211" fill="#fbbf24" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">PROTO_ICMP</text>
+
+            {/* PROTO_VAL -> PORT_VAL */}
+            <line x1="520" y1="100" x2="670" y2="100" stroke="#64748b" strokeWidth="2" markerEnd="url(#dfa-arrow)" />
+            <rect x="550" y="80" width="90" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="595" y="93" fill="#c084fc" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">VALID_PORTS</text>
+
+            {/* PORT_VAL -> TCP_CLASS */}
+            <line x1="670" y1="100" x2="810" y2="65" stroke="#64748b" strokeWidth="2" markerEnd="url(#dfa-arrow)" />
+            <rect x="698" y="58" width="90" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="743" y="71" fill="#06b6d4" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">DISPATCH_TCP</text>
+
+            {/* PORT_VAL -> UDP_CLASS */}
+            <line x1="670" y1="100" x2="810" y2="135" stroke="#64748b" strokeWidth="2" markerEnd="url(#dfa-arrow)" />
+            <rect x="698" y="122" width="90" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="743" y="135" fill="#3b82f6" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">DISPATCH_UDP</text>
+
+            {/* TCP_CLASS -> ACCEPTED */}
+            <line x1="810" y1="65" x2="935" y2="160" stroke="#10b981" strokeWidth="2" markerEnd="url(#dfa-arrow-accept)" />
+
+            {/* UDP_CLASS -> ACCEPTED */}
+            <line x1="810" y1="135" x2="935" y2="160" stroke="#10b981" strokeWidth="2" markerEnd="url(#dfa-arrow-accept)" />
+
+            {/* ICMP_CLASS -> ACCEPTED */}
+            <path d="M 520 230 C 660 260, 800 240, 935 160" fill="none" stroke="#10b981" strokeWidth="2" markerEnd="url(#dfa-arrow-accept)" />
+            <rect x="670" y="222" width="110" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="725" y="235" fill="#34d399" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">FINALIZE_ACCEPT</text>
+
+            {/* Rejection dashed red curves to REJECTED (520, 370) */}
+            <path d="M 70 186 Q 130 370 495 370" fill="none" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#dfa-arrow-reject)" />
+            <path d="M 220 186 Q 270 360 495 370" fill="none" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#dfa-arrow-reject)" />
+            <path d="M 370 186 Q 410 350 495 370" fill="none" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#dfa-arrow-reject)" />
+            <line x1="520" y1="126" x2="520" y2="345" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#dfa-arrow-reject)" />
+            <path d="M 670 126 Q 640 330 545 370" fill="none" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#dfa-arrow-reject)" />
+
+            <text x="280" y="380" fill="#f87171" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">INVALID_INPUT (REJECT PATHS)</text>
+
+            {/* REJECTED Trap Self Loop */}
+            <path d="M 535 396 C 570 435, 470 435, 505 396" fill="none" stroke="#ef4444" strokeWidth="1.6" markerEnd="url(#dfa-arrow-reject)" />
+            <text x="520" y="445" fill="#f87171" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">Any Input (Trap / Sink)</text>
+
+            {/* State Circles */}
+            {Object.entries(nodePositions).map(([key, node]) => {
+              const isActive = activeNode === key;
+              return (
+                <g key={key} style={{ cursor: 'pointer' }} onClick={() => setActiveNode(key)}>
+                  {/* Outer double circle for final state ACCEPTED */}
+                  {node.isFinal && (
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r="32"
+                      fill="none"
+                      stroke={isActive ? '#34d399' : '#10b981'}
+                      strokeWidth="2.5"
+                    />
+                  )}
+                  {/* Active Halo */}
+                  {isActive && (
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r={node.isFinal ? '38' : '32'}
+                      fill="none"
+                      stroke={node.color}
+                      strokeWidth="2"
+                      opacity="0.6"
+                      filter="url(#dfa-glow)"
+                    />
+                  )}
+                  {/* Main Node Circle */}
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r="26"
+                    fill={isActive ? 'rgba(6, 182, 212, 0.35)' : '#0f172a'}
+                    stroke={isActive ? '#38bdf8' : node.color}
+                    strokeWidth={isActive ? '3' : '2'}
+                  />
+                  {/* Node Label Text */}
+                  <text
+                    x={node.x}
+                    y={node.y + 4}
+                    fill="#ffffff"
+                    fontSize="9"
+                    fontWeight="700"
+                    textAnchor="middle"
+                    fontFamily="monospace"
+                  >
+                    {node.label.split(' ')[0]}
+                  </text>
+                  {/* Subtitle Under Node */}
+                  <text
+                    x={node.x}
+                    y={node.y + 36}
+                    fill={node.color}
+                    fontSize="8"
+                    fontWeight="600"
+                    textAnchor="middle"
+                  >
+                    {node.isFinal ? 'FINAL (F)' : node.isTrap ? 'TRAP' : key === 'START' ? 'q0' : ''}
+                  </text>
+                </g>
+              );
+            })}
           </svg>
+        </div>
+      </div>
+
+      {/* Active State Inspector Card */}
+      <div className="card" style={{ borderLeft: `4px solid ${currentNodeInfo.color}` }}>
+        <div className="card-header">
+          <div className="card-title">
+            <span>🔍 Inspected State: <span style={{ color: currentNodeInfo.color }}>{activeNode}</span></span>
+          </div>
+          <span className="badge badge-tcp">{currentNodeInfo.type}</span>
+        </div>
+        <div style={{ fontSize: '0.875rem', color: '#cbd5e1', lineHeight: 1.6 }}>
+          {currentNodeInfo.desc}
+        </div>
+      </div>
+
+      {/* Interactive Step-by-Step Automaton Simulator */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">
+            <span>🎮 Interactive Step-by-Step Automaton Simulator</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {!isSimulating ? (
+              <button className="btn btn-primary btn-sm" onClick={handleStartSim}>
+                ▶ Start DFA Simulation
+              </button>
+            ) : (
+              <>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleNextStep}
+                  disabled={simIndex >= simSteps.length}
+                >
+                  ⏭ Next Step ({simIndex}/{simSteps.length})
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={handleResetSim}>
+                  ↺ Reset
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Preset Sample Selector */}
+        <div style={{ marginBottom: '1rem' }}>
+          <label className="form-label">Load Predefined RFC 5737 Test Vector</label>
+          <select
+            className="form-control"
+            value={selectedSample}
+            onChange={e => handleSelectSample(e.target.value)}
+            disabled={isSimulating}
+          >
+            {SAMPLE_VECTORS.map(s => (
+              <option key={s.id} value={s.id}>{s.name} - ({s.category.toUpperCase()})</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Input Parameters for Simulation */}
+        <div className="form-grid" style={{ marginBottom: '1rem' }}>
+          <div>
+            <label className="form-label">Source IP</label>
+            <input
+              type="text"
+              className="form-control"
+              value={simPacket.sourceIp}
+              onChange={e => setSimPacket({ ...simPacket, sourceIp: e.target.value })}
+              disabled={isSimulating}
+            />
+          </div>
+          <div>
+            <label className="form-label">Destination IP</label>
+            <input
+              type="text"
+              className="form-control"
+              value={simPacket.destinationIp}
+              onChange={e => setSimPacket({ ...simPacket, destinationIp: e.target.value })}
+              disabled={isSimulating}
+            />
+          </div>
+          <div>
+            <label className="form-label">Protocol</label>
+            <select
+              className="form-control"
+              value={simPacket.protocol}
+              onChange={e => setSimPacket({ ...simPacket, protocol: e.target.value })}
+              disabled={isSimulating}
+            >
+              <option value="TCP">TCP</option>
+              <option value="UDP">UDP</option>
+              <option value="ICMP">ICMP</option>
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Source Port</label>
+            <input
+              type="text"
+              className="form-control"
+              value={simPacket.sourcePort}
+              onChange={e => setSimPacket({ ...simPacket, sourcePort: e.target.value })}
+              disabled={isSimulating || simPacket.protocol === 'ICMP'}
+            />
+          </div>
+          <div>
+            <label className="form-label">Destination Port</label>
+            <input
+              type="text"
+              className="form-control"
+              value={simPacket.destinationPort}
+              onChange={e => setSimPacket({ ...simPacket, destinationPort: e.target.value })}
+              disabled={isSimulating || simPacket.protocol === 'ICMP'}
+            />
+          </div>
+        </div>
+
+        {/* Live Step Tracker Box */}
+        {isSimulating && currentStep && (
+          <div style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-focus)',
+            borderRadius: 'var(--radius-md)',
+            padding: '1rem',
+            marginTop: '0.75rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+              <span className="badge badge-tcp">Step {simIndex} of {simSteps.length}</span>
+              <span style={{ fontSize: '0.9rem', color: '#fff', fontWeight: 600 }}>
+                δ({currentStep.fromState}, <span style={{ color: '#38bdf8' }}>{currentStep.inputSymbol}</span>) →{' '}
+                <span style={{
+                  color: currentStep.toState === 'ACCEPTED' ? '#34d399' :
+                         currentStep.toState === 'REJECTED' ? '#f87171' : '#a855f7'
+                }}>
+                  {currentStep.toState}
+                </span>
+              </span>
+            </div>
+            <div style={{ fontSize: '0.825rem', color: '#94a3b8' }}>
+              {currentStep.description}
+            </div>
+
+            {isSimComplete && (
+              <div style={{
+                marginTop: '0.75rem',
+                padding: '0.75rem',
+                borderRadius: '6px',
+                background: activeNode === 'ACCEPTED' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                border: `1px solid ${activeNode === 'ACCEPTED' ? '#10b981' : '#ef4444'}`,
+                fontWeight: 700,
+                fontSize: '0.9rem',
+                color: activeNode === 'ACCEPTED' ? '#34d399' : '#f87171'
+              }}>
+                Automaton Execution Complete: {activeNode === 'ACCEPTED' ? '✓ PACKET OFFICIALLY ACCEPTED' : '✗ PACKET TRAPPED IN REJECTED STATE'}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Formal State Transition Table */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">
+            <span>📋 State Transition Function: δ(q, a) → q&apos;</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              className={`btn btn-sm ${filterState === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilterState('ALL')}
+            >
+              All ({TRANSITION_TABLE.length})
+            </button>
+            <button
+              className={`btn btn-sm ${filterState === 'VALID' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilterState('VALID')}
+            >
+              Valid Paths
+            </button>
+            <button
+              className={`btn btn-sm ${filterState === 'INVALID' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilterState('INVALID')}
+            >
+              Rejection Paths
+            </button>
+          </div>
+        </div>
+
+        <div className="table-responsive">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Current State (q)</th>
+                <th>Input Symbol (a ∈ Σ)</th>
+                <th>Next State δ(q, a)</th>
+                <th>Operational Rule &amp; Constraint Verified</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTransitions.map((t, idx) => (
+                <tr key={idx}>
+                  <td className="mono-cell" style={{ fontWeight: 600, color: '#38bdf8' }}>{t.from}</td>
+                  <td className="mono-cell" style={{ color: t.type === 'valid' ? '#a78bfa' : '#f87171' }}>{t.input}</td>
+                  <td className="mono-cell">
+                    <span className={`badge ${t.to === 'ACCEPTED' ? 'badge-valid' : t.to === 'REJECTED' ? 'badge-invalid' : 'badge-tcp'}`}>
+                      {t.to}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{t.rule}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -17,16 +17,16 @@ export default function DfaVisualizer({ automataInfo }) {
 
   // States layout coordinates for the SVG state transition diagram
   const nodePositions = {
-    START: { x: 70, y: 180, label: 'q0: START', color: '#38bdf8' },
-    SOURCE_VALIDATION: { x: 230, y: 180, label: 'SRC_VAL', color: '#60a5fa' },
-    DESTINATION_VALIDATION: { x: 390, y: 180, label: 'DST_VAL', color: '#818cf8' },
-    PROTOCOL_VALIDATION: { x: 550, y: 120, label: 'PROTO_VAL', color: '#a78bfa' },
-    ICMP_CLASSIFIED: { x: 550, y: 260, label: 'ICMP_CLASS', color: '#fbbf24' },
-    PORT_VALIDATION: { x: 710, y: 120, label: 'PORT_VAL', color: '#c084fc' },
-    TCP_CLASSIFIED: { x: 860, y: 80, label: 'TCP_CLASS', color: '#06b6d4' },
-    UDP_CLASSIFIED: { x: 860, y: 160, label: 'UDP_CLASS', color: '#3b82f6' },
-    ACCEPTED: { x: 1010, y: 180, label: 'ACCEPTED (F)', color: '#34d399', isFinal: true },
-    REJECTED: { x: 550, y: 380, label: 'REJECTED (Trap)', color: '#f87171', isTrap: true }
+    START: { x: 70, y: 160, label: 'START (q0)', color: '#38bdf8' },
+    SOURCE_VALIDATION: { x: 220, y: 160, label: 'SRC_VAL', color: '#60a5fa' },
+    DESTINATION_VALIDATION: { x: 370, y: 160, label: 'DST_VAL', color: '#818cf8' },
+    PROTOCOL_VALIDATION: { x: 520, y: 100, label: 'PROTO_VAL', color: '#a78bfa' },
+    ICMP_CLASSIFIED: { x: 520, y: 230, label: 'ICMP_CLASS', color: '#fbbf24' },
+    PORT_VALIDATION: { x: 670, y: 100, label: 'PORT_VAL', color: '#c084fc' },
+    TCP_CLASSIFIED: { x: 810, y: 65, label: 'TCP_CLASS', color: '#06b6d4' },
+    UDP_CLASSIFIED: { x: 810, y: 135, label: 'UDP_CLASS', color: '#3b82f6' },
+    ACCEPTED: { x: 935, y: 160, label: 'ACCEPTED (F)', color: '#34d399', isFinal: true },
+    REJECTED: { x: 520, y: 370, label: 'REJECTED (Trap)', color: '#f87171', isTrap: true }
   };
 
   // Pre-generate steps for the current simulation packet
@@ -235,71 +235,89 @@ export default function DfaVisualizer({ automataInfo }) {
         </div>
 
         <div className="dfa-diagram-box">
-          <svg width="1120" height="460" viewBox="0 0 1120 460" style={{ background: '#0b1120', borderRadius: '12px' }}>
+          <svg viewBox="0 0 1000 470" style={{ width: '100%', maxWidth: '1000px', height: 'auto', display: 'block', background: '#0a0f1d', borderRadius: '12px' }}>
             <defs>
-              <marker id="arrow" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="arrow" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
               </marker>
-              <marker id="arrow-active" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="arrow-active" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
               </marker>
-              <marker id="arrow-reject" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="arrow-reject" viewBox="0 0 10 10" refX="20" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" />
               </marker>
+              <marker id="arrow-accept" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+              </marker>
+              <filter id="dfa-glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
             </defs>
 
             {/* Initial state pointer */}
-            <line x1="20" y1="180" x2="65" y2="180" stroke="#38bdf8" strokeWidth="2.5" markerEnd="url(#arrow-active)" />
-            <text x="25" y="170" fill="#38bdf8" fontSize="10" fontFamily="sans-serif">Start</text>
+            <line x1="15" y1="160" x2="45" y2="160" stroke="#38bdf8" strokeWidth="2.5" markerEnd="url(#arrow-active)" />
+            <text x="18" y="148" fill="#38bdf8" fontSize="11" fontWeight="700">Start</text>
 
             {/* Transitions between valid states */}
             {/* START -> SRC_VAL */}
-            <line x1="70" y1="180" x2="230" y2="180" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
-            <text x="110" y="170" fill="#94a3b8" fontSize="9" fontFamily="monospace">VALID_SRC_IP</text>
+            <line x1="70" y1="160" x2="220" y2="160" stroke="#64748b" strokeWidth="2" markerEnd="url(#arrow)" />
+            <rect x="98" y="140" width="94" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="145" y="153" fill="#38bdf8" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">VALID_SRC_IP</text>
 
             {/* SRC_VAL -> DST_VAL */}
-            <line x1="230" y1="180" x2="390" y2="180" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
-            <text x="270" y="170" fill="#94a3b8" fontSize="9" fontFamily="monospace">VALID_DST_IP</text>
+            <line x1="220" y1="160" x2="370" y2="160" stroke="#64748b" strokeWidth="2" markerEnd="url(#arrow)" />
+            <rect x="248" y="140" width="94" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="295" y="153" fill="#38bdf8" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">VALID_DST_IP</text>
 
             {/* DST_VAL -> PROTO_VAL (TCP/UDP) */}
-            <line x1="390" y1="180" x2="550" y2="120" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
-            <text x="430" y="135" fill="#94a3b8" fontSize="9" fontFamily="monospace">PROTO_TCP / UDP</text>
+            <line x1="370" y1="160" x2="520" y2="100" stroke="#64748b" strokeWidth="2" markerEnd="url(#arrow)" />
+            <rect x="390" y="112" width="105" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="442" y="125" fill="#a78bfa" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">PROTO_TCP / UDP</text>
 
             {/* DST_VAL -> ICMP_CLASS */}
-            <line x1="390" y1="180" x2="550" y2="260" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
-            <text x="430" y="235" fill="#fbbf24" fontSize="9" fontFamily="monospace">PROTO_ICMP</text>
+            <line x1="370" y1="160" x2="520" y2="230" stroke="#64748b" strokeWidth="2" markerEnd="url(#arrow)" />
+            <rect x="395" y="198" width="90" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="440" y="211" fill="#fbbf24" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">PROTO_ICMP</text>
 
             {/* PROTO_VAL -> PORT_VAL */}
-            <line x1="550" y1="120" x2="710" y2="120" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
-            <text x="590" y="110" fill="#94a3b8" fontSize="9" fontFamily="monospace">VALID_PORTS</text>
+            <line x1="520" y1="100" x2="670" y2="100" stroke="#64748b" strokeWidth="2" markerEnd="url(#arrow)" />
+            <rect x="550" y="80" width="90" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="595" y="93" fill="#c084fc" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">VALID_PORTS</text>
 
             {/* PORT_VAL -> TCP_CLASS */}
-            <line x1="710" y1="120" x2="860" y2="80" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
-            <text x="740" y="85" fill="#06b6d4" fontSize="9" fontFamily="monospace">DISPATCH_TCP</text>
+            <line x1="670" y1="100" x2="810" y2="65" stroke="#64748b" strokeWidth="2" markerEnd="url(#arrow)" />
+            <rect x="698" y="58" width="90" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="743" y="71" fill="#06b6d4" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">DISPATCH_TCP</text>
 
             {/* PORT_VAL -> UDP_CLASS */}
-            <line x1="710" y1="120" x2="860" y2="160" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
-            <text x="740" y="165" fill="#3b82f6" fontSize="9" fontFamily="monospace">DISPATCH_UDP</text>
+            <line x1="670" y1="100" x2="810" y2="135" stroke="#64748b" strokeWidth="2" markerEnd="url(#arrow)" />
+            <rect x="698" y="122" width="90" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="743" y="135" fill="#3b82f6" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">DISPATCH_UDP</text>
 
             {/* TCP_CLASS -> ACCEPTED */}
-            <line x1="860" y1="80" x2="1010" y2="180" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
+            <line x1="810" y1="65" x2="935" y2="160" stroke="#10b981" strokeWidth="2" markerEnd="url(#arrow-accept)" />
 
             {/* UDP_CLASS -> ACCEPTED */}
-            <line x1="860" y1="160" x2="1010" y2="180" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
+            <line x1="810" y1="135" x2="935" y2="160" stroke="#10b981" strokeWidth="2" markerEnd="url(#arrow-accept)" />
 
             {/* ICMP_CLASS -> ACCEPTED */}
-            <line x1="550" y1="260" x2="1010" y2="180" stroke="#475569" strokeWidth="2" markerEnd="url(#arrow)" />
-            <text x="730" y="230" fill="#34d399" fontSize="9" fontFamily="monospace">FINALIZE_ACCEPT</text>
+            <path d="M 520 230 C 660 260, 800 240, 935 160" fill="none" stroke="#10b981" strokeWidth="2" markerEnd="url(#arrow-accept)" />
+            <rect x="670" y="222" width="110" height="18" rx="4" fill="#0f172a" fillOpacity="0.85" stroke="#334155" strokeWidth="1" />
+            <text x="725" y="235" fill="#34d399" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">FINALIZE_ACCEPT</text>
 
             {/* Rejection transitions to REJECTED (Trap) */}
-            <path d="M 70 205 Q 120 380 520 380" fill="none" stroke="#ef4444" strokeWidth="1.2" strokeDasharray="4" markerEnd="url(#arrow-reject)" />
-            <path d="M 230 205 Q 280 370 520 380" fill="none" stroke="#ef4444" strokeWidth="1.2" strokeDasharray="4" markerEnd="url(#arrow-reject)" />
-            <path d="M 390 205 Q 430 360 520 380" fill="none" stroke="#ef4444" strokeWidth="1.2" strokeDasharray="4" markerEnd="url(#arrow-reject)" />
-            <path d="M 550 145 L 550 355" fill="none" stroke="#ef4444" strokeWidth="1.2" strokeDasharray="4" markerEnd="url(#arrow-reject)" />
+            <path d="M 70 186 Q 130 370 495 370" fill="none" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#arrow-reject)" />
+            <path d="M 220 186 Q 270 360 495 370" fill="none" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#arrow-reject)" />
+            <path d="M 370 186 Q 410 350 495 370" fill="none" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#arrow-reject)" />
+            <line x1="520" y1="126" x2="520" y2="345" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#arrow-reject)" />
+            <path d="M 670 126 Q 640 330 545 370" fill="none" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#arrow-reject)" />
+
+            <text x="280" y="380" fill="#f87171" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">INVALID_INPUT (REJECT PATHS)</text>
 
             {/* REJECTED self-loop (Trap state) */}
-            <path d="M 575 400 C 620 440, 480 440, 525 400" fill="none" stroke="#ef4444" strokeWidth="1.5" markerEnd="url(#arrow-reject)" />
-            <text x="525" y="445" fill="#f87171" fontSize="9" fontFamily="monospace">Any Input (Sink)</text>
+            <path d="M 535 396 C 570 435, 470 435, 505 396" fill="none" stroke="#ef4444" strokeWidth="1.6" markerEnd="url(#arrow-reject)" />
+            <text x="520" y="445" fill="#f87171" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="monospace">Any Input (Trap / Sink)</text>
 
             {/* State Circles */}
             {Object.entries(nodePositions).map(([stateKey, pos]) => {
@@ -311,10 +329,24 @@ export default function DfaVisualizer({ automataInfo }) {
                     <circle
                       cx={pos.x}
                       cy={pos.y}
-                      r="33"
+                      r="32"
                       fill="none"
                       stroke={isActive ? '#34d399' : '#10b981'}
                       strokeWidth="2.5"
+                    />
+                  )}
+
+                  {/* Active Halo */}
+                  {isActive && (
+                    <circle
+                      cx={pos.x}
+                      cy={pos.y}
+                      r={pos.isFinal ? '38' : '32'}
+                      fill="none"
+                      stroke={pos.color}
+                      strokeWidth="2"
+                      opacity="0.6"
+                      filter="url(#dfa-glow)"
                     />
                   )}
 
@@ -322,25 +354,35 @@ export default function DfaVisualizer({ automataInfo }) {
                   <circle
                     cx={pos.x}
                     cy={pos.y}
-                    r="27"
-                    fill={isActive ? 'rgba(6, 182, 212, 0.35)' : '#1e293b'}
-                    stroke={isActive ? '#06b6d4' : pos.color}
+                    r="26"
+                    fill={isActive ? 'rgba(6, 182, 212, 0.35)' : '#0f172a'}
+                    stroke={isActive ? '#38bdf8' : pos.color}
                     strokeWidth={isActive ? '3' : '2'}
                   />
 
                   {/* State text */}
                   <text
-                    cx={pos.x}
-                    cy={pos.y}
                     x={pos.x}
                     y={pos.y + 4}
-                    fill={isActive ? '#fff' : '#e2e8f0'}
-                    fontSize="9.5"
+                    fill="#ffffff"
+                    fontSize="9"
                     fontWeight="700"
                     textAnchor="middle"
-                    fontFamily="sans-serif"
+                    fontFamily="monospace"
                   >
                     {pos.label.split(' ')[0]}
+                  </text>
+
+                  {/* Subtitle Under Node */}
+                  <text
+                    x={pos.x}
+                    y={pos.y + 36}
+                    fill={pos.color}
+                    fontSize="8"
+                    fontWeight="600"
+                    textAnchor="middle"
+                  >
+                    {pos.isFinal ? 'FINAL (F)' : pos.isTrap ? 'TRAP' : stateKey === 'START' ? 'q0' : ''}
                   </text>
                 </g>
               );
