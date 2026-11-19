@@ -1,0 +1,32 @@
+{
+  "name": "network-packet-validation-server",
+  "version": "1.0.0",
+  "description": "Backend API and DFA Automata Engine for Network Packet Format Validation and Classification System (Question 51)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test/dfa.test.js && node test/api.test.js && node test/controllers.test.js",
+    "test:dfa": "node test/dfa.test.js",
+    "test:api": "node test/api.test.js",
+    "test:controllers": "node test/controllers.test.js"
+  },
+  "keywords": [
+    "network-packet",
+    "packet-validation",
+    "dfa",
+    "finite-automata",
+    "regex",
+    "express",
+    "mongodb",
+    "mern"
+  ],
+  "author": "B.Tech Information Technology Student",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongoose": "^8.9.5"
+  }
+}

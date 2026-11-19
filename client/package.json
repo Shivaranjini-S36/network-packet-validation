@@ -1,0 +1,20 @@
+{
+  "name": "network-packet-validation-client",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "React.js Frontend for Network Packet Format Validation and Classification System (Question 51)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
