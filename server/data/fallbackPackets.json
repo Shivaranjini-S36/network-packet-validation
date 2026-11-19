@@ -1,5 +1,185 @@
 [
   {
+    "packetId": "PKT-1016",
+    "sourceIp": "192.0.2.299",
+    "destinationIp": "198.51.100.20",
+    "protocol": "TCP",
+    "sourcePort": 12345,
+    "destinationPort": 443,
+    "isValid": false,
+    "validationErrors": [
+      "Source IP error: Octet 4 (299) out of range (must be 0-255)"
+    ],
+    "dfaClassification": "REJECTED_PACKET",
+    "dfaFinalState": "REJECTED",
+    "stateTransitions": [
+      {
+        "step": 1,
+        "fromState": "START",
+        "inputSymbol": "INVALID_SRC_IP",
+        "toState": "REJECTED",
+        "description": "Source IP validation failed: Source IP error: Octet 4 (299) out of range (must be 0-255). Transited to REJECTED trap state.",
+        "timestamp": "2026-11-19T05:07:45.582Z"
+      }
+    ],
+    "fieldValidations": {
+      "sourceIpValid": false,
+      "destinationIpValid": true,
+      "protocolValid": true,
+      "portsValid": true
+    },
+    "rawInput": {
+      "sourceIp": "192.0.2.299",
+      "destinationIp": "198.51.100.20",
+      "protocol": "TCP",
+      "sourcePort": 12345,
+      "destinationPort": 443
+    },
+    "createdAt": "2026-11-19T05:07:45.583Z",
+    "updatedAt": "2026-11-19T05:07:45.583Z",
+    "_id": "local_1795064865583"
+  },
+  {
+    "packetId": "PKT-1015",
+    "sourceIp": "192.0.2.1",
+    "destinationIp": "203.0.113.1",
+    "protocol": "ICMP",
+    "sourcePort": null,
+    "destinationPort": null,
+    "isValid": true,
+    "validationErrors": [],
+    "dfaClassification": "ICMP_PACKET",
+    "dfaFinalState": "ACCEPTED",
+    "stateTransitions": [
+      {
+        "step": 1,
+        "fromState": "START",
+        "inputSymbol": "VALID_SRC_IP",
+        "toState": "SOURCE_VALIDATION",
+        "description": "Source IP '192.0.2.1' matched IPv4 format and octet ranges [0-255].",
+        "timestamp": "2026-11-19T05:07:45.576Z"
+      },
+      {
+        "step": 2,
+        "fromState": "SOURCE_VALIDATION",
+        "inputSymbol": "VALID_DST_IP",
+        "toState": "DESTINATION_VALIDATION",
+        "description": "Destination IP '203.0.113.1' matched IPv4 format and octet ranges [0-255].",
+        "timestamp": "2026-11-19T05:07:45.576Z"
+      },
+      {
+        "step": 3,
+        "fromState": "DESTINATION_VALIDATION",
+        "inputSymbol": "PROTO_ICMP",
+        "toState": "ICMP_CLASSIFIED",
+        "description": "Protocol evaluated as ICMP (Network Layer, IP Protocol 1). Port validation bypassed.",
+        "timestamp": "2026-11-19T05:07:45.576Z"
+      },
+      {
+        "step": 4,
+        "fromState": "ICMP_CLASSIFIED",
+        "inputSymbol": "FINALIZE_ACCEPT",
+        "toState": "ACCEPTED",
+        "description": "All packet criteria verified. Packet officially ACCEPTED as ICMP_PACKET.",
+        "timestamp": "2026-11-19T05:07:45.576Z"
+      }
+    ],
+    "fieldValidations": {
+      "sourceIpValid": true,
+      "destinationIpValid": true,
+      "protocolValid": true,
+      "portsValid": true
+    },
+    "rawInput": {
+      "sourceIp": "192.0.2.1",
+      "destinationIp": "203.0.113.1",
+      "protocol": "ICMP",
+      "sourcePort": null,
+      "destinationPort": null
+    },
+    "createdAt": "2026-11-19T05:07:45.577Z",
+    "updatedAt": "2026-11-19T05:07:45.577Z",
+    "_id": "local_1795064865578"
+  },
+  {
+    "packetId": "PKT-1014",
+    "sourceIp": "192.0.2.10",
+    "destinationIp": "198.51.100.80",
+    "protocol": "TCP",
+    "sourcePort": 49152,
+    "destinationPort": 80,
+    "isValid": true,
+    "validationErrors": [],
+    "dfaClassification": "TCP_PACKET",
+    "dfaFinalState": "ACCEPTED",
+    "stateTransitions": [
+      {
+        "step": 1,
+        "fromState": "START",
+        "inputSymbol": "VALID_SRC_IP",
+        "toState": "SOURCE_VALIDATION",
+        "description": "Source IP '192.0.2.10' matched IPv4 format and octet ranges [0-255].",
+        "timestamp": "2026-11-19T05:07:45.570Z"
+      },
+      {
+        "step": 2,
+        "fromState": "SOURCE_VALIDATION",
+        "inputSymbol": "VALID_DST_IP",
+        "toState": "DESTINATION_VALIDATION",
+        "description": "Destination IP '198.51.100.80' matched IPv4 format and octet ranges [0-255].",
+        "timestamp": "2026-11-19T05:07:45.570Z"
+      },
+      {
+        "step": 3,
+        "fromState": "DESTINATION_VALIDATION",
+        "inputSymbol": "PROTO_TCP",
+        "toState": "PROTOCOL_VALIDATION",
+        "description": "Protocol evaluated as TCP. Transport layer port validation required.",
+        "timestamp": "2026-11-19T05:07:45.570Z"
+      },
+      {
+        "step": 4,
+        "fromState": "PROTOCOL_VALIDATION",
+        "inputSymbol": "VALID_PORTS",
+        "toState": "PORT_VALIDATION",
+        "description": "Ports verified: Source Port 49152, Destination Port 80 within allowable range [1-65535].",
+        "timestamp": "2026-11-19T05:07:45.570Z"
+      },
+      {
+        "step": 5,
+        "fromState": "PORT_VALIDATION",
+        "inputSymbol": "DISPATCH_TCP",
+        "toState": "TCP_CLASSIFIED",
+        "description": "Packet successfully classified as TCP transmission.",
+        "timestamp": "2026-11-19T05:07:45.570Z"
+      },
+      {
+        "step": 6,
+        "fromState": "TCP_CLASSIFIED",
+        "inputSymbol": "FINALIZE_ACCEPT",
+        "toState": "ACCEPTED",
+        "description": "All validation rules and DFA transitions passed. Packet officially ACCEPTED.",
+        "timestamp": "2026-11-19T05:07:45.570Z"
+      }
+    ],
+    "fieldValidations": {
+      "sourceIpValid": true,
+      "destinationIpValid": true,
+      "protocolValid": true,
+      "portsValid": true
+    },
+    "rawInput": {
+      "sourceIp": "192.0.2.10",
+      "destinationIp": "198.51.100.80",
+      "protocol": "TCP",
+      "sourcePort": 49152,
+      "destinationPort": 80
+    },
+    "createdAt": "2026-11-19T05:07:45.571Z",
+    "updatedAt": "2026-11-19T05:07:45.571Z",
+    "_id": "local_1795064865571"
+  },
+  {
     "packetId": "PKT-1013",
     "sourceIp": "192.0.2.299",
     "destinationIp": "198.51.100.20",
