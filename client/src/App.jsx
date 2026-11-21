@@ -10,6 +10,7 @@ import PacketRecordsPage from './pages/PacketRecordsPage';
 import SampleTestingPage from './pages/SampleTestingPage';
 import DfaVisualizationPage from './pages/DfaVisualizationPage';
 import PacketHistoryPage from './pages/PacketHistoryPage';
+import TransitionTable from './components/TransitionTable';
 
 // API services
 import {
@@ -180,6 +181,10 @@ export default function App() {
             <DfaVisualizationPage
               automataInfo={automataInfo}
             />
+          )}
+
+          {activePage === 'transition-table' && (
+            <TransitionTable />
           )}
 
           {activePage === 'history' && (

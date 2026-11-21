@@ -7,6 +7,7 @@ export default function Header({ activePage, onToggleMobile, onResetSamples, dbS
     'records': { title: 'Packet Records', sub: 'Searchable & Filterable Packet Log' },
     'sample-testing': { title: 'Sample Packet Testing', sub: 'Predefined Academic RFC Test Vectors' },
     'dfa-visualizer': { title: 'DFA Automata Engine', sub: 'Formal Language State Machine & Transition Diagram' },
+    'transition-table': { title: 'State Transition Table', sub: 'Formal Transition Function δ: Q × Σ → Q & Matrix Grid' },
     'history': { title: 'Historical Audit Trail', sub: 'Persistent Packet Processing Log' }
   };
 

@@ -7,6 +7,7 @@ export default function Sidebar({ activePage, setActivePage, isMobileOpen, setIs
     { id: 'records', label: 'Packet Records', icon: '📋' },
     { id: 'sample-testing', label: 'Sample Testing', icon: '🧪' },
     { id: 'dfa-visualizer', label: 'DFA Visualization', icon: '⚙️' },
+    { id: 'transition-table', label: 'Transition Table', icon: '📑' },
     { id: 'history', label: 'Packet History', icon: '📜' }
   ];
 

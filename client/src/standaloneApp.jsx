@@ -448,6 +448,7 @@ function StandaloneApp() {
             { id: 'records', label: 'Packet Records', icon: '📋' },
             { id: 'sample-testing', label: 'Sample Testing', icon: '🧪' },
             { id: 'dfa-visualizer', label: 'DFA Visualization', icon: '⚙️' },
+            { id: 'transition-table', label: 'Transition Table', icon: '📑' },
             { id: 'history', label: 'Packet History', icon: '📜' }
           ].map(item => (
             <button
@@ -489,6 +490,7 @@ function StandaloneApp() {
                 {activePage === 'records' && 'Packet Records'}
                 {activePage === 'sample-testing' && 'Sample Packet Testing'}
                 {activePage === 'dfa-visualizer' && 'DFA Automata Engine'}
+                {activePage === 'transition-table' && 'State Transition Table'}
                 {activePage === 'history' && 'Historical Audit Trail'}
               </h1>
               <p className="page-sub">Question 51: Network Packet Format Validation &amp; Classification System</p>
@@ -727,7 +729,12 @@ function StandaloneApp() {
             <DfaVisualizerView />
           )}
 
-          {/* 6. History */}
+          {/* 6. State Transition Table */}
+          {activePage === 'transition-table' && (
+            <TransitionTableView />
+          )}
+
+          {/* 7. History */}
           {activePage === 'history' && (
             <HistoryView packets={packets} onInspectPacket={setInspectedPacket} />
           )}
@@ -1504,6 +1511,410 @@ function DfaVisualizerView() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- State Transition Table View ---
+function TransitionTableView() {
+  const [filterType, setFilterType] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState('table');
+  const [selectedState, setSelectedState] = useState('START');
+  const [selectedSymbol, setSelectedSymbol] = useState('VALID_SRC_IP');
+
+  const TRANSITIONS = [
+    { from: 'START', input: 'VALID_SRC_IP', to: 'SOURCE_VALIDATION', type: 'valid', category: 'IPv4 Validation', rule: 'Source IP format valid and octets within [0–255]' },
+    { from: 'START', input: 'INVALID_SRC_IP', to: 'REJECTED', type: 'invalid', category: 'Rejection Path', rule: 'Source IP malformed or octet exceeds 255' },
+    { from: 'SOURCE_VALIDATION', input: 'VALID_DST_IP', to: 'DESTINATION_VALIDATION', type: 'valid', category: 'IPv4 Validation', rule: 'Destination IP format valid and octets within [0–255]' },
+    { from: 'SOURCE_VALIDATION', input: 'INVALID_DST_IP', to: 'REJECTED', type: 'invalid', category: 'Rejection Path', rule: 'Destination IP malformed or octet exceeds 255' },
+    { from: 'DESTINATION_VALIDATION', input: 'PROTO_TCP', to: 'PROTOCOL_VALIDATION', type: 'valid', category: 'Protocol Analysis', rule: 'Protocol identified as TCP (RFC 793); port bounds validation required' },
+    { from: 'DESTINATION_VALIDATION', input: 'PROTO_UDP', to: 'PROTOCOL_VALIDATION', type: 'valid', category: 'Protocol Analysis', rule: 'Protocol identified as UDP (RFC 768); port bounds validation required' },
+    { from: 'DESTINATION_VALIDATION', input: 'PROTO_ICMP', to: 'ICMP_CLASSIFIED', type: 'valid', category: 'RFC 792 Bypass', rule: 'Protocol identified as ICMP; transport ports bypassed per RFC 792' },
+    { from: 'DESTINATION_VALIDATION', input: 'INVALID_PROTO', to: 'REJECTED', type: 'invalid', category: 'Rejection Path', rule: 'Protocol missing, unsupported, or unrecognized' },
+    { from: 'PROTOCOL_VALIDATION', input: 'VALID_PORTS', to: 'PORT_VALIDATION', type: 'valid', category: 'Port Validation', rule: 'Source and Destination ports in valid integer range [1–65535]' },
+    { from: 'PROTOCOL_VALIDATION', input: 'INVALID_PORTS', to: 'REJECTED', type: 'invalid', category: 'Rejection Path', rule: 'Port non-numeric or out of allowable range [1–65535]' },
+    { from: 'PORT_VALIDATION', input: 'DISPATCH_TCP', to: 'TCP_CLASSIFIED', type: 'valid', category: 'Classification', rule: 'Packet confirmed as Transmission Control Protocol' },
+    { from: 'PORT_VALIDATION', input: 'DISPATCH_UDP', to: 'UDP_CLASSIFIED', type: 'valid', category: 'Classification', rule: 'Packet confirmed as User Datagram Protocol' },
+    { from: 'TCP_CLASSIFIED', input: 'FINALIZE_ACCEPT', to: 'ACCEPTED', type: 'valid', category: 'Final Accept', rule: 'All validation criteria met; packet accepted as TCP_PACKET' },
+    { from: 'UDP_CLASSIFIED', input: 'FINALIZE_ACCEPT', to: 'ACCEPTED', type: 'valid', category: 'Final Accept', rule: 'All validation criteria met; packet accepted as UDP_PACKET' },
+    { from: 'ICMP_CLASSIFIED', input: 'FINALIZE_ACCEPT', to: 'ACCEPTED', type: 'valid', category: 'Final Accept', rule: 'All validation criteria met; packet accepted as ICMP_PACKET' },
+    { from: 'REJECTED', input: 'ANY_INPUT', to: 'REJECTED', type: 'trap', category: 'Sink State Loop', rule: 'Trap / Dead state: irreversible loop for all subsequent symbols' }
+  ];
+
+  const ALL_STATES = [
+    'START',
+    'SOURCE_VALIDATION',
+    'DESTINATION_VALIDATION',
+    'PROTOCOL_VALIDATION',
+    'PORT_VALIDATION',
+    'TCP_CLASSIFIED',
+    'UDP_CLASSIFIED',
+    'ICMP_CLASSIFIED',
+    'ACCEPTED',
+    'REJECTED'
+  ];
+
+  const ALL_SYMBOLS = [
+    'VALID_SRC_IP',
+    'INVALID_SRC_IP',
+    'VALID_DST_IP',
+    'INVALID_DST_IP',
+    'PROTO_TCP',
+    'PROTO_UDP',
+    'PROTO_ICMP',
+    'INVALID_PROTO',
+    'VALID_PORTS',
+    'INVALID_PORTS',
+    'DISPATCH_TCP',
+    'DISPATCH_UDP',
+    'FINALIZE_ACCEPT',
+    'ANY_INPUT'
+  ];
+
+  const getTransition = (state, symbol) => {
+    if (state === 'REJECTED') {
+      return { to: 'REJECTED', type: 'trap', rule: 'Trap state self-loop: packet remains trapped in REJECTED state' };
+    }
+    const found = TRANSITIONS.find(t => t.from === state && t.input === symbol);
+    if (found) return found;
+    return { to: 'REJECTED', type: 'invalid', rule: `Undefined transition from ${state} on symbol ${symbol}; routes to REJECTED` };
+  };
+
+  const currentEval = getTransition(selectedState, selectedSymbol);
+
+  const filtered = TRANSITIONS.filter(t => {
+    if (filterType === 'valid' && t.type !== 'valid') return false;
+    if (filterType === 'invalid' && t.type !== 'invalid') return false;
+    if (filterType === 'trap' && t.type !== 'trap') return false;
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      return (
+        t.from.toLowerCase().includes(q) ||
+        t.input.toLowerCase().includes(q) ||
+        t.to.toLowerCase().includes(q) ||
+        t.rule.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
+  const MATRIX_COLUMNS = [
+    { key: 'VALID_SRC_IP', label: 'VALID_SRC' },
+    { key: 'INVALID_SRC_IP', label: 'INV_SRC' },
+    { key: 'VALID_DST_IP', label: 'VALID_DST' },
+    { key: 'INVALID_DST_IP', label: 'INV_DST' },
+    { key: 'PROTO_TCP', label: 'TCP' },
+    { key: 'PROTO_UDP', label: 'UDP' },
+    { key: 'PROTO_ICMP', label: 'ICMP' },
+    { key: 'INVALID_PROTO', label: 'INV_PROTO' },
+    { key: 'VALID_PORTS', label: 'PORTS_OK' },
+    { key: 'INVALID_PORTS', label: 'PORTS_BAD' },
+    { key: 'DISPATCH_TCP', label: 'DISP_TCP' },
+    { key: 'DISPATCH_UDP', label: 'DISP_UDP' },
+    { key: 'FINALIZE_ACCEPT', label: 'ACCEPT' },
+    { key: 'ANY_INPUT', label: 'ANY' }
+  ];
+
+  return (
+    <div>
+      {/* Formal Definition Card */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">
+            <span>📐 Formal Automaton Specification: M = (Q, Σ, q0, F, δ)</span>
+          </div>
+          <span className="badge badge-valid">10-STATE DETERMINISTIC FINITE AUTOMATON</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', fontSize: '0.85rem' }}>
+          <div>
+            <div style={{ color: '#94a3b8', fontWeight: 600 }}>States Q (|Q| = 10)</div>
+            <div style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8', fontSize: '0.75rem', marginTop: '0.25rem', wordBreak: 'break-word' }}>
+              &#123; START, SOURCE_VALIDATION, DESTINATION_VALIDATION, PROTOCOL_VALIDATION, PORT_VALIDATION, TCP_CLASSIFIED, UDP_CLASSIFIED, ICMP_CLASSIFIED, ACCEPTED, REJECTED &#125;
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#94a3b8', fontWeight: 600 }}>Initial (q0), Final (F) &amp; Trap States</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+              <span style={{ color: '#60a5fa' }}>q0 = START</span> | <span style={{ color: '#34d399' }}>F = &#123; ACCEPTED &#125;</span> | <span style={{ color: '#f87171' }}>Trap = &#123; REJECTED &#125;</span>
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#94a3b8', fontWeight: 600 }}>Input Alphabet Σ (|Σ| = 13)</div>
+            <div style={{ fontFamily: 'var(--font-mono)', color: '#c084fc', fontSize: '0.75rem', marginTop: '0.25rem', wordBreak: 'break-word' }}>
+              &#123; VALID_SRC_IP, INVALID_SRC_IP, VALID_DST_IP, INVALID_DST_IP, PROTO_TCP, PROTO_UDP, PROTO_ICMP, INVALID_PROTO, VALID_PORTS, INVALID_PORTS, DISPATCH_TCP, DISPATCH_UDP, FINALIZE_ACCEPT &#125;
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Interactive Live State-Input Evaluator */}
+      <div className="card" style={{ borderLeft: '4px solid var(--cyan)' }}>
+        <div className="card-header">
+          <div className="card-title">
+            <span>⚡ Interactive Transition Evaluator: δ(q, a) → q&apos;</span>
+          </div>
+          <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Select any State and Symbol to evaluate transition</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <label className="form-label">Current State (q ∈ Q)</label>
+            <select
+              className="form-control"
+              value={selectedState}
+              onChange={e => setSelectedState(e.target.value)}
+            >
+              {ALL_STATES.map(st => (
+                <option key={st} value={st}>{st}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Input Symbol (a ∈ Σ)</label>
+            <select
+              className="form-control"
+              value={selectedSymbol}
+              onChange={e => setSelectedSymbol(e.target.value)}
+            >
+              {ALL_SYMBOLS.map(sym => (
+                <option key={sym} value={sym}>{sym}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Live Evaluated Output Box */}
+        <div style={{
+          background: 'var(--bg-surface)',
+          padding: '1rem',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '1rem'
+        }}>
+          <div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', marginBottom: '0.25rem' }}>
+              δ({selectedState}, <span style={{ color: '#38bdf8' }}>{selectedSymbol}</span>) →{' '}
+              <span style={{
+                color: currentEval.to === 'ACCEPTED' ? '#34d399' :
+                       currentEval.to === 'REJECTED' ? '#f87171' : '#60a5fa'
+              }}>
+                {currentEval.to}
+              </span>
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+              {currentEval.rule}
+            </div>
+          </div>
+          <span className={`badge ${currentEval.type === 'valid' ? 'badge-valid' : currentEval.type === 'trap' ? 'badge-invalid' : 'badge-invalid'}`}>
+            {currentEval.type === 'valid' ? '✓ ACCEPTING PATH' : currentEval.type === 'trap' ? '⚠ SINK TRAP LOOP' : '✗ REJECTION PATH'}
+          </span>
+        </div>
+      </div>
+
+      {/* Main State Transition Table Section */}
+      <div className="card">
+        <div className="card-header" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div className="card-title">
+            <span>📋 State Transition Function δ: Q × Σ → Q</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setViewMode('table')}
+            >
+              📑 Audit Table View
+            </button>
+            <button
+              className={`btn btn-sm ${viewMode === 'matrix' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setViewMode('matrix')}
+            >
+              📐 2D Matrix Grid (Q × Σ)
+            </button>
+          </div>
+        </div>
+
+        {viewMode === 'table' ? (
+          <div>
+            {/* Filter & Search Bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <button
+                  className={`btn btn-sm ${filterType === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setFilterType('ALL')}
+                >
+                  All ({TRANSITIONS.length})
+                </button>
+                <button
+                  className={`btn btn-sm ${filterType === 'valid' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setFilterType('valid')}
+                >
+                  Valid Paths (8)
+                </button>
+                <button
+                  className={`btn btn-sm ${filterType === 'invalid' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setFilterType('invalid')}
+                >
+                  Rejection Paths (7)
+                </button>
+                <button
+                  className={`btn btn-sm ${filterType === 'trap' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setFilterType('trap')}
+                >
+                  Trap Loop (1)
+                </button>
+              </div>
+
+              <div style={{ minWidth: '220px' }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="🔍 Search state or rule..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  style={{ padding: '0.4rem 0.75rem', fontSize: '0.825rem' }}
+                />
+              </div>
+            </div>
+
+            {/* Transition Table */}
+            <div className="table-responsive">
+              <table className="custom-table">
+                <thead>
+                  <tr>
+                    <th>Current State (q ∈ Q)</th>
+                    <th>Input Symbol (a ∈ Σ)</th>
+                    <th>Next State δ(q, a)</th>
+                    <th>Path Type</th>
+                    <th>Operational Verification Rule</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((t, idx) => (
+                    <tr key={idx}>
+                      <td className="mono-cell" style={{ fontWeight: 600, color: '#38bdf8' }}>{t.from}</td>
+                      <td className="mono-cell" style={{ color: t.type === 'valid' ? '#a78bfa' : '#f87171' }}>{t.input}</td>
+                      <td className="mono-cell">
+                        <span className={`badge ${t.to === 'ACCEPTED' ? 'badge-valid' : t.to === 'REJECTED' ? 'badge-invalid' : 'badge-tcp'}`}>
+                          {t.to}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${t.type === 'valid' ? 'badge-valid' : 'badge-invalid'}`} style={{ fontSize: '0.68rem' }}>
+                          {t.type === 'valid' ? 'ACCEPTING' : t.type === 'trap' ? 'SINK TRAP' : 'REJECTION'}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{t.rule}</td>
+                    </tr>
+                  ))}
+                  {filtered.length === 0 && (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>
+                        No transitions match your search filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          /* 2D Matrix Grid (Q x Sigma) */
+          <div>
+            <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '1rem' }}>
+              Standard automata theory 2D state transition matrix mapping every state q ∈ Q (rows) against alphabet symbols a ∈ Σ (columns).
+            </p>
+            <div className="table-responsive">
+              <table className="custom-table" style={{ fontSize: '0.72rem' }}>
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: '140px' }}>State (Q)</th>
+                    {MATRIX_COLUMNS.map(col => (
+                      <th key={col.key} style={{ textAlign: 'center', padding: '0.5rem 0.35rem' }}>{col.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ALL_STATES.map(st => (
+                    <tr key={st}>
+                      <td className="mono-cell" style={{ fontWeight: 700, color: '#38bdf8', whiteSpace: 'nowrap' }}>{st}</td>
+                      {MATRIX_COLUMNS.map(col => {
+                        const tr = TRANSITIONS.find(t => t.from === st && t.input === col.key);
+                        if (st === 'REJECTED') {
+                          return (
+                            <td key={col.key} style={{ textAlign: 'center', color: '#f87171', fontWeight: 600 }}>
+                              REJECT
+                            </td>
+                          );
+                        }
+                        if (!tr) {
+                          return (
+                            <td key={col.key} style={{ textAlign: 'center', color: '#475569' }}>—</td>
+                          );
+                        }
+                        return (
+                          <td key={col.key} style={{
+                            textAlign: 'center',
+                            fontWeight: 700,
+                            color: tr.to === 'ACCEPTED' ? '#34d399' : tr.to === 'REJECTED' ? '#f87171' : '#60a5fa'
+                          }}>
+                            {tr.to.replace('_VALIDATION', '_VAL').replace('_CLASSIFIED', '_CLS')}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Protocol Pathways Comparison Card */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">
+            <span>🔀 Protocol-Specific Transition Pathways</span>
+          </div>
+          <span className="badge badge-valid">RFC STANDARDS ALIGNMENT</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+          <div style={{ background: 'var(--bg-surface)', padding: '1rem', borderRadius: 'var(--radius-md)', borderTop: '3px solid var(--cyan)' }}>
+            <div style={{ fontWeight: 700, color: 'var(--cyan)', marginBottom: '0.5rem' }}>🌐 TCP Pathway (RFC 793)</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: '#cbd5e1', lineHeight: 1.8 }}>
+              START → SRC_VAL → DST_VAL → PROTO_VAL → PORT_VAL → TCP_CLASS → ACCEPTED
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+              Full 7-step sequence requiring 16-bit source and destination port validation.
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-surface)', padding: '1rem', borderRadius: 'var(--radius-md)', borderTop: '3px solid var(--blue)' }}>
+            <div style={{ fontWeight: 700, color: 'var(--blue)', marginBottom: '0.5rem' }}>⚡ UDP Pathway (RFC 768)</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: '#cbd5e1', lineHeight: 1.8 }}>
+              START → SRC_VAL → DST_VAL → PROTO_VAL → PORT_VAL → UDP_CLASS → ACCEPTED
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+              Validates connectionless datagram ports and dispatches to UDP classifier.
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--bg-surface)', padding: '1rem', borderRadius: 'var(--radius-md)', borderTop: '3px solid var(--amber)' }}>
+            <div style={{ fontWeight: 700, color: 'var(--amber)', marginBottom: '0.5rem' }}>📡 ICMP Pathway (RFC 792)</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: '#cbd5e1', lineHeight: 1.8 }}>
+              START → SRC_VAL → DST_VAL → ICMP_CLASS → ACCEPTED
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#34d399', marginTop: '0.5rem', fontWeight: 600 }}>
+              ★ Port check bypassed: Network layer control messages carry no transport ports.
+            </div>
+          </div>
         </div>
       </div>
     </div>
